@@ -37,7 +37,9 @@ def start(ctx, description, preset, project, tag):
     wid = api.get_workspace_id()
 
     if preset:
-        project, tag, preset_name = _resolve_preset(preset)
+        project, preset_tags, preset_name = _resolve_preset(preset)
+        if not tag:
+            tag = preset_tags
     elif description is None and not project:
         description, project, tag, preset_name = _interactive_start()
     else:
