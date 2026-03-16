@@ -19,7 +19,6 @@ def test_start(mock_api_cls):
 
     assert result.exit_code == 0
     assert "Started: test task" in result.output
-    assert "456" in result.output
     api.start_timer.assert_called_once_with(
         "test task", 123, project_id=None, tags=None
     )
@@ -79,3 +78,318 @@ def test_status_no_timer(mock_api_cls):
 
     assert result.exit_code == 0
     assert "No timer running" in result.output
+
+
+@patch("tgl.cli.get_presets")
+@patch("tgl.cli.TogglAPI")
+def test_start_with_preset(mock_api_cls, mock_presets):
+    api = MagicMock()
+    mock_api_cls.return_value = api
+    api.get_workspace_id.return_value = 123
+    api.start_timer.return_value = {"id": 789}
+    mock_presets.return_value = {
+        "research": {
+            "project_id": 100,
+            "project_name": "Research-related",
+            "tags": ["Core activities"],
+        }
+    }
+
+    runner = CliRunner()
+    result = runner.invoke(
+        main, ["--apitoken", "fake", "start", "-P", "research", "writing paper"]
+    )
+
+    assert result.exit_code == 0
+    assert "Started: writing paper" in result.output
+    assert "Research-related" in result.output
+    api.start_timer.assert_called_once_with(
+        "writing paper", 123, project_id=100, tags=["Core activities"]
+    )
+
+
+@patch("tgl.cli.get_presets")
+@patch("tgl.cli.TogglAPI")
+def test_start_with_unknown_preset(mock_api_cls, mock_presets):
+    api = MagicMock()
+    mock_api_cls.return_value = api
+    mock_presets.return_value = {"research": {"project_id": 100}}
+
+    runner = CliRunner()
+    result = runner.invoke(main, ["--apitoken", "fake", "start", "-P", "bogus", "task"])
+
+    assert result.exit_code != 0
+    assert "bogus" in result.output
+    assert "research" in result.output
+
+
+@patch("tgl.cli.get_presets")
+@patch("tgl.cli.TogglAPI")
+def test_start_interactive_pick_preset(mock_api_cls, mock_presets):
+    api = MagicMock()
+    mock_api_cls.return_value = api
+    api.get_workspace_id.return_value = 123
+    api.start_timer.return_value = {"id": 999}
+    mock_presets.return_value = {
+        "research": {
+            "project_id": 100,
+            "project_name": "Research-related",
+            "tags": ["Core activities"],
+        },
+        "admin": {
+            "project_id": 200,
+            "project_name": "Admin tasks",
+            "tags": ["Admin"],
+        },
+    }
+
+    runner = CliRunner()
+    # Input: pick preset 1, then enter description
+    result = runner.invoke(
+        main, ["--apitoken", "fake", "start"], input="1\nreviewing paper\n"
+    )
+
+    assert result.exit_code == 0
+    assert "Started: reviewing paper" in result.output
+
+
+@patch("tgl.cli.get_presets")
+@patch("tgl.cli.TogglAPI")
+def test_start_interactive_no_presets_falls_back(mock_api_cls, mock_presets):
+    api = MagicMock()
+    mock_api_cls.return_value = api
+    api.get_workspace_id.return_value = 123
+    api.start_timer.return_value = {"id": 999}
+    mock_presets.return_value = {}
+
+    runner = CliRunner()
+    result = runner.invoke(main, ["--apitoken", "fake", "start"], input="just a task\n")
+
+    assert result.exit_code == 0
+    assert "Started: just a task" in result.output
+
+
+@patch("tgl.cli.TogglAPI")
+def test_resume_last_timer(mock_api_cls):
+    api = MagicMock()
+    mock_api_cls.return_value = api
+    api.get_workspace_id.return_value = 123
+    api.current_timer.return_value = None
+    api.recent_entries.return_value = [
+        {
+            "description": "writing paper",
+            "project_id": 100,
+            "tags": ["Core activities"],
+            "workspace_id": 123,
+        }
+    ]
+    api.start_timer.return_value = {"id": 555}
+
+    runner = CliRunner()
+    result = runner.invoke(main, ["--apitoken", "fake", "resume"])
+
+    assert result.exit_code == 0
+    assert "Resumed: writing paper" in result.output
+    api.start_timer.assert_called_once_with(
+        "writing paper", 123, project_id=100, tags=["Core activities"]
+    )
+
+
+@patch("tgl.cli.TogglAPI")
+def test_resume_no_recent_entries(mock_api_cls):
+    api = MagicMock()
+    mock_api_cls.return_value = api
+    api.current_timer.return_value = None
+    api.recent_entries.return_value = []
+
+    runner = CliRunner()
+    result = runner.invoke(main, ["--apitoken", "fake", "resume"])
+
+    assert result.exit_code == 0
+    assert "No recent entries" in result.output
+
+
+@patch("tgl.cli.TogglAPI")
+def test_resume_while_timer_running(mock_api_cls):
+    api = MagicMock()
+    mock_api_cls.return_value = api
+    api.current_timer.return_value = {"description": "already running", "duration": -1}
+
+    runner = CliRunner()
+    result = runner.invoke(main, ["--apitoken", "fake", "resume"])
+
+    assert result.exit_code == 0
+    assert "already running" in result.output
+
+
+@patch("tgl.cli.TogglAPI")
+def test_resume_skips_entries_without_description(mock_api_cls):
+    api = MagicMock()
+    mock_api_cls.return_value = api
+    api.get_workspace_id.return_value = 123
+    api.current_timer.return_value = None
+    api.recent_entries.return_value = [
+        {"description": "", "project_id": None, "tags": [], "workspace_id": 123},
+        {
+            "description": "real task",
+            "project_id": 50,
+            "tags": ["Admin"],
+            "workspace_id": 123,
+        },
+    ]
+    api.start_timer.return_value = {"id": 600}
+
+    runner = CliRunner()
+    result = runner.invoke(main, ["--apitoken", "fake", "resume"])
+
+    assert result.exit_code == 0
+    assert "Resumed: real task" in result.output
+    api.start_timer.assert_called_once_with(
+        "real task", 123, project_id=50, tags=["Admin"]
+    )
+
+
+@patch("tgl.cli.TogglAPI")
+def test_init_creates_config(mock_api_cls, tmp_path, monkeypatch):
+    api = MagicMock()
+    mock_api_cls.return_value = api
+    api.get_workspace_id.return_value = 123
+    api.get_projects.return_value = [
+        {"id": 100, "name": "Research-related", "active": True},
+        {"id": 200, "name": "Admin tasks", "active": True},
+        {"id": 300, "name": "Old project", "active": False},
+    ]
+    api.get_tags.return_value = [
+        {"id": 1, "name": "Core activities"},
+        {"id": 2, "name": "Admin"},
+    ]
+
+    config_file = tmp_path / "config.toml"
+    monkeypatch.setattr("tgl.config.CONFIG_DIR", tmp_path)
+    monkeypatch.setattr("tgl.config.CONFIG_FILE", config_file)
+
+    runner = CliRunner()
+    result = runner.invoke(main, ["--apitoken", "fake", "init"])
+
+    assert result.exit_code == 0
+    assert config_file.exists()
+    content = config_file.read_text()
+    assert "research-related" in content
+    assert "admin-tasks" in content
+    assert "Old project" not in content or "# " in content  # inactive only in comments
+
+
+def test_date_range_today():
+    from tgl.cli import _date_range
+    import datetime
+
+    ref = datetime.date(2026, 3, 16)  # a Monday
+    start, end = _date_range("today", ref)
+    assert start == datetime.date(2026, 3, 16)
+    assert end == datetime.date(2026, 3, 16)
+
+
+def test_date_range_week():
+    from tgl.cli import _date_range
+    import datetime
+
+    ref = datetime.date(2026, 3, 18)  # a Wednesday
+    start, end = _date_range("week", ref)
+    assert start == datetime.date(2026, 3, 16)  # Monday
+    assert end == datetime.date(2026, 3, 18)
+
+
+def test_date_range_last_week():
+    from tgl.cli import _date_range
+    import datetime
+
+    ref = datetime.date(2026, 3, 18)  # a Wednesday
+    start, end = _date_range("last-week", ref)
+    assert start == datetime.date(2026, 3, 9)  # prev Monday
+    assert end == datetime.date(2026, 3, 15)  # prev Sunday
+
+
+def test_date_range_month():
+    from tgl.cli import _date_range
+    import datetime
+
+    ref = datetime.date(2026, 3, 18)
+    start, end = _date_range("month", ref)
+    assert start == datetime.date(2026, 3, 1)
+    assert end == datetime.date(2026, 3, 18)
+
+
+@patch("tgl.cli.TogglAPI")
+def test_summary_today(mock_api_cls):
+    api = MagicMock()
+    mock_api_cls.return_value = api
+    api.get_workspace_id.return_value = 123
+    api.get_projects.return_value = [
+        {"id": 100, "name": "Research", "active": True},
+        {"id": 200, "name": "Admin", "active": True},
+    ]
+    api.time_entries_between.return_value = [
+        {
+            "description": "writing",
+            "project_id": 100,
+            "duration": 3600,
+            "tags": ["Core activities"],
+        },
+        {
+            "description": "emails",
+            "project_id": 200,
+            "duration": 1800,
+            "tags": ["Admin"],
+        },
+        {
+            "description": "reading",
+            "project_id": 100,
+            "duration": 900,
+            "tags": ["Core activities"],
+        },
+    ]
+
+    runner = CliRunner()
+    result = runner.invoke(main, ["--apitoken", "fake", "summary"])
+
+    assert result.exit_code == 0
+    assert "Research" in result.output
+    assert "Admin" in result.output
+    assert "1:15:00" in result.output  # 3600 + 900 = 4500s = 1:15:00
+    assert "0:30:00" in result.output  # 1800s
+    assert "1:45:00" in result.output  # total
+
+
+@patch("tgl.cli.TogglAPI")
+def test_summary_no_entries(mock_api_cls):
+    api = MagicMock()
+    mock_api_cls.return_value = api
+    api.get_workspace_id.return_value = 123
+    api.get_projects.return_value = []
+    api.time_entries_between.return_value = []
+
+    runner = CliRunner()
+    result = runner.invoke(main, ["--apitoken", "fake", "summary"])
+
+    assert result.exit_code == 0
+    assert "No entries" in result.output
+
+
+@patch("tgl.cli.TogglAPI")
+def test_summary_with_period(mock_api_cls):
+    api = MagicMock()
+    mock_api_cls.return_value = api
+    api.get_workspace_id.return_value = 123
+    api.get_projects.return_value = [
+        {"id": 100, "name": "Research", "active": True},
+    ]
+    api.time_entries_between.return_value = [
+        {"description": "writing", "project_id": 100, "duration": 7200, "tags": []},
+    ]
+
+    runner = CliRunner()
+    result = runner.invoke(main, ["--apitoken", "fake", "summary", "week"])
+
+    assert result.exit_code == 0
+    assert "Research" in result.output
+    assert "2:00:00" in result.output

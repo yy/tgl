@@ -23,7 +23,13 @@ class TogglAPI:
         }
 
     def load_api_token(self):
-        """Load API token from ~/.env file."""
+        """Load API token from environment or ~/.env file."""
+        # Check environment variable first
+        token = os.environ.get("TOGGL_API_TOKEN")
+        if token:
+            self.api_token = token
+            return
+
         home_dir = os.path.expanduser("~")
         env_path = os.path.join(home_dir, ".env")
 
@@ -43,6 +49,8 @@ class TogglAPI:
                     if not line or "=" not in line:
                         continue
                     key, value = line.split("=", 1)
+                    key = key.removeprefix("export ").strip()
+                    value = value.strip().strip("'\"")
                     if key == "TOGGL_API_TOKEN":
                         self.api_token = value
                         return
@@ -82,6 +90,37 @@ class TogglAPI:
         """Get workspace ID (assumes single workspace)."""
         workspaces = self.get("/workspaces")
         return workspaces[0]["id"]
+
+    def get_projects(self, workspace_id):
+        """Get all projects in a workspace."""
+        return self.get(
+            f"/workspaces/{workspace_id}/projects", params={"per_page": 500}
+        )
+
+    def get_tags(self, workspace_id):
+        """Get all tags in a workspace."""
+        return self.get(f"/workspaces/{workspace_id}/tags")
+
+    def time_entries_between(self, start_date, end_date):
+        """Get time entries between two dates (inclusive, local time). Dates are date objects."""
+        import datetime
+
+        local_tz = datetime.datetime.now(datetime.timezone.utc).astimezone().tzinfo
+        start = datetime.datetime.combine(
+            start_date, datetime.time.min, tzinfo=local_tz
+        )
+        end = datetime.datetime.combine(
+            end_date + datetime.timedelta(days=1), datetime.time.min, tzinfo=local_tz
+        )
+        params = {
+            "start_date": start.isoformat(),
+            "end_date": end.isoformat(),
+        }
+        return self.get("/me/time_entries", params=params)
+
+    def recent_entries(self, limit=10):
+        """Get recent time entries (most recent first)."""
+        return self.get("/me/time_entries")[:limit]
 
     def current_timer(self):
         """Get the currently running time entry, or None."""
