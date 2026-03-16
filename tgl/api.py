@@ -91,6 +91,10 @@ class TogglAPI:
         workspaces = self.get("/workspaces")
         return workspaces[0]["id"]
 
+    def get_clients(self, workspace_id):
+        """Get all clients in a workspace."""
+        return self.get(f"/workspaces/{workspace_id}/clients")
+
     def get_projects(self, workspace_id):
         """Get all projects in a workspace."""
         return self.get(

@@ -47,7 +47,7 @@ Generate a config file from your Toggl workspace:
 tgl init
 ```
 
-This creates `~/.config/tgl/config.toml` with one preset per active project. Edit it to add tags or remove projects you don't use:
+This walks you through picking which projects to include and assigning default tags. The result is saved to `~/.config/tgl/config.toml`:
 
 ```toml
 [presets.website]

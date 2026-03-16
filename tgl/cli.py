@@ -16,7 +16,10 @@ from tgl.config import get_presets, init_config
 def main(ctx, apitoken):
     """Toggl timer CLI."""
     ctx.ensure_object(dict)
-    ctx.obj["api"] = TogglAPI(api_token=apitoken)
+    try:
+        ctx.obj["api"] = TogglAPI(api_token=apitoken)
+    except (ValueError, FileNotFoundError) as e:
+        raise click.ClickException(str(e))
 
 
 @main.command()

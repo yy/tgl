@@ -249,34 +249,131 @@ def test_resume_skips_entries_without_description(mock_api_cls):
     )
 
 
-@patch("tgl.cli.TogglAPI")
-def test_init_creates_config(mock_api_cls, tmp_path, monkeypatch):
+def _mock_init_api(mock_api_cls):
+    """Set up a mock API with clients, projects, and tags for init tests."""
     api = MagicMock()
     mock_api_cls.return_value = api
     api.get_workspace_id.return_value = 123
+    api.get_clients.return_value = [
+        {"id": 10, "name": "Research"},
+        {"id": 20, "name": "Teaching"},
+        {"id": 30, "name": "Service"},
+    ]
     api.get_projects.return_value = [
-        {"id": 100, "name": "Research-related", "active": True},
-        {"id": 200, "name": "Admin tasks", "active": True},
-        {"id": 300, "name": "Old project", "active": False},
+        {"id": 100, "name": "Paper writing", "active": True, "client_id": 10},
+        {"id": 101, "name": "Grant proposal", "active": True, "client_id": 10},
+        {"id": 200, "name": "Course prep", "active": True, "client_id": 20},
+        {"id": 300, "name": "Committee work", "active": True, "client_id": 30},
+        {"id": 999, "name": "Old project", "active": False, "client_id": 10},
     ]
     api.get_tags.return_value = [
-        {"id": 1, "name": "Core activities"},
+        {"id": 1, "name": "Deep work"},
         {"id": 2, "name": "Admin"},
+        {"id": 3, "name": "Meetings"},
     ]
+    return api
 
+
+@patch("tgl.cli.TogglAPI")
+def test_init_all_areas_all_projects(mock_api_cls, tmp_path, monkeypatch):
+    _mock_init_api(mock_api_cls)
     config_file = tmp_path / "config.toml"
     monkeypatch.setattr("tgl.config.CONFIG_DIR", tmp_path)
     monkeypatch.setattr("tgl.config.CONFIG_FILE", config_file)
 
     runner = CliRunner()
-    result = runner.invoke(main, ["--apitoken", "fake", "init"])
+    # all areas, all projects, skip tags for each (4 active projects)
+    result = runner.invoke(
+        main, ["--apitoken", "fake", "init"], input="all\nall\n\n\n\n\n"
+    )
 
-    assert result.exit_code == 0
+    assert result.exit_code == 0, result.output
     assert config_file.exists()
     content = config_file.read_text()
-    assert "research-related" in content
-    assert "admin-tasks" in content
-    assert "Old project" not in content or "# " in content  # inactive only in comments
+    assert "paper-writing" in content
+    assert "grant-proposal" in content
+    assert "course-prep" in content
+    assert "committee-work" in content
+
+
+@patch("tgl.cli.TogglAPI")
+def test_init_select_specific_areas(mock_api_cls, tmp_path, monkeypatch):
+    _mock_init_api(mock_api_cls)
+    config_file = tmp_path / "config.toml"
+    monkeypatch.setattr("tgl.config.CONFIG_DIR", tmp_path)
+    monkeypatch.setattr("tgl.config.CONFIG_FILE", config_file)
+
+    runner = CliRunner()
+    # Pick area 1 (Research) only, all projects in it, skip tags
+    result = runner.invoke(main, ["--apitoken", "fake", "init"], input="1\nall\n\n\n")
+
+    assert result.exit_code == 0, result.output
+    content = config_file.read_text()
+    assert "paper-writing" in content
+    assert "grant-proposal" in content
+    assert "course-prep" not in content
+    assert "committee-work" not in content
+
+
+@patch("tgl.cli.TogglAPI")
+def test_init_select_specific_projects(mock_api_cls, tmp_path, monkeypatch):
+    _mock_init_api(mock_api_cls)
+    config_file = tmp_path / "config.toml"
+    monkeypatch.setattr("tgl.config.CONFIG_DIR", tmp_path)
+    monkeypatch.setattr("tgl.config.CONFIG_FILE", config_file)
+
+    runner = CliRunner()
+    # All areas, pick only project 1 and 3, skip tags
+    result = runner.invoke(main, ["--apitoken", "fake", "init"], input="all\n1,3\n\n\n")
+
+    assert result.exit_code == 0, result.output
+    import tomllib
+
+    with open(config_file, "rb") as f:
+        config = tomllib.load(f)
+    keys = list(config["presets"].keys())
+    assert len(keys) == 2
+
+
+@patch("tgl.cli.TogglAPI")
+def test_init_assign_tags(mock_api_cls, tmp_path, monkeypatch):
+    _mock_init_api(mock_api_cls)
+    config_file = tmp_path / "config.toml"
+    monkeypatch.setattr("tgl.config.CONFIG_DIR", tmp_path)
+    monkeypatch.setattr("tgl.config.CONFIG_FILE", config_file)
+
+    runner = CliRunner()
+    # Area 1 (Research), all projects (Grant proposal, Paper writing sorted),
+    # Tags sorted: 1=Admin, 2=Deep work, 3=Meetings
+    # Grant proposal gets tag 2 (Deep work), Paper writing gets tag 1,3 (Admin, Meetings)
+    result = runner.invoke(
+        main, ["--apitoken", "fake", "init"], input="1\nall\n2\n1,3\n"
+    )
+
+    assert result.exit_code == 0, result.output
+    import tomllib
+
+    with open(config_file, "rb") as f:
+        config = tomllib.load(f)
+    assert config["presets"]["grant-proposal"]["tags"] == ["Deep work"]
+    assert config["presets"]["paper-writing"]["tags"] == ["Admin", "Meetings"]
+
+
+@patch("tgl.cli.TogglAPI")
+def test_init_shows_summary(mock_api_cls, tmp_path, monkeypatch):
+    _mock_init_api(mock_api_cls)
+    config_file = tmp_path / "config.toml"
+    monkeypatch.setattr("tgl.config.CONFIG_DIR", tmp_path)
+    monkeypatch.setattr("tgl.config.CONFIG_FILE", config_file)
+
+    runner = CliRunner()
+    result = runner.invoke(main, ["--apitoken", "fake", "init"], input="1\nall\n1\n\n")
+
+    assert result.exit_code == 0, result.output
+    # Should show a summary before writing
+    assert "Summary" in result.output or "summary" in result.output
+    assert "Grant proposal" in result.output
+    assert "Paper writing" in result.output
 
 
 def test_date_range_today():
