@@ -1,0 +1,21 @@
+[project]
+name = "tgl"
+version = "0.1.0"
+description = "CLI to start/stop Toggl timers"
+requires-python = ">=3.13"
+dependencies = [
+    "click",
+    "requests",
+]
+
+[project.scripts]
+tgl = "tgl.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "pytest",
+]
