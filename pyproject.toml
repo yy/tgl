@@ -1,5 +1,5 @@
 [project]
-name = "tgl"
+name = "tgl-cli"
 version = "0.1.0"
 description = "CLI to start/stop Toggl timers"
 requires-python = ">=3.13"
