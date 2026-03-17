@@ -27,8 +27,14 @@ def main(ctx, apitoken):
 @click.option("--preset", "-P", default=None, help="Use a named preset")
 @click.option("--project", "-p", type=int, default=None, help="Project ID")
 @click.option("--tag", "-t", multiple=True, help="Tags")
+@click.option(
+    "--start-time",
+    "-s",
+    default=None,
+    help="Start time (e.g. '5:45' or '2026-03-17T05:45')",
+)
 @click.pass_context
-def start(ctx, description, preset, project, tag):
+def start(ctx, description, preset, project, tag, start_time):
     """Start a new timer.
 
     With no arguments, enters interactive mode to pick a preset and description.
@@ -48,8 +54,11 @@ def start(ctx, description, preset, project, tag):
     if description is None:
         description = click.prompt("Description")
 
+    start_utc = _parse_start_time(start_time) if start_time else None
     tags = list(tag) if tag else None
-    entry = api.start_timer(description, wid, project_id=project, tags=tags)
+    entry = api.start_timer(
+        description, wid, project_id=project, tags=tags, start_time=start_utc
+    )
 
     parts = [f"Started: {description}"]
     if preset_name:
@@ -248,6 +257,33 @@ def _format_duration(seconds):
     h, remainder = divmod(seconds, 3600)
     m, s = divmod(remainder, 60)
     return f"{h}:{m:02d}:{s:02d}"
+
+
+def _parse_start_time(value):
+    """Parse a start time string into a UTC datetime.
+
+    Accepts 'HH:MM' (today, local time) or an ISO datetime string.
+    """
+    local_tz = datetime.datetime.now(datetime.timezone.utc).astimezone().tzinfo
+    try:
+        # Try HH:MM format (today, local time)
+        t = datetime.datetime.strptime(value, "%H:%M")
+        local_dt = datetime.datetime.combine(
+            datetime.date.today(), t.time(), tzinfo=local_tz
+        )
+        return local_dt.astimezone(datetime.timezone.utc)
+    except ValueError:
+        pass
+    # Try ISO format
+    try:
+        dt = datetime.datetime.fromisoformat(value)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=local_tz)
+        return dt.astimezone(datetime.timezone.utc)
+    except ValueError:
+        raise click.ClickException(
+            f"Cannot parse start time: {value!r}. Use HH:MM or ISO format."
+        )
 
 
 def _elapsed_since(start_str):

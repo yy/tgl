@@ -131,16 +131,19 @@ class TogglAPI:
         result = self.get("/me/time_entries/current")
         return result
 
-    def start_timer(self, description, workspace_id, project_id=None, tags=None):
-        """Start a new time entry."""
+    def start_timer(
+        self, description, workspace_id, project_id=None, tags=None, start_time=None
+    ):
+        """Start a new time entry. start_time is an optional datetime (UTC)."""
         import datetime
+
+        if start_time is None:
+            start_time = datetime.datetime.now(datetime.timezone.utc)
 
         data = {
             "description": description,
             "workspace_id": workspace_id,
-            "start": datetime.datetime.now(datetime.timezone.utc).strftime(
-                "%Y-%m-%dT%H:%M:%S.000Z"
-            ),
+            "start": start_time.strftime("%Y-%m-%dT%H:%M:%S.000Z"),
             "duration": -1,
             "created_with": "tgl",
         }
