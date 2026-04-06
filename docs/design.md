@@ -8,7 +8,9 @@ tgl exists because switching to a browser to press a button breaks flow. A timer
 
 ### Do one thing
 
-tgl manages the current timer: start, stop, status, resume. It does not sync reports, manage projects, or replicate the Toggl web UI. If you need those, use the web app.
+tgl is still timer-first: start, stop, status, resume, plus lightweight reporting that
+fits terminal workflows. It does not try to replicate the Toggl web UI, manage the full
+workspace model, or become an analytics dashboard.
 
 ### Clear errors
 
@@ -78,12 +80,17 @@ tgl/
   cli.py      Click commands. Parses args, calls API, prints output.
   api.py      TogglAPI class. HTTP methods + token loading. No CLI concerns.
   config.py   Preset loading from ~/.config/tgl/config.toml.
+  reporting.py  Report date ranges, CSV aggregation, reports.toml loading/writing.
 tests/
   test_cli.py     Tests against mocked API. No network calls.
   test_config.py  Tests for config loading and preset resolution.
+  test_reporting.py  Unit tests for reporting helpers.
+  test_api.py        Reports API CSV coverage.
 ```
 
-The boundary is clean: `cli.py` never constructs URLs or headers; `api.py` never prints or parses arguments; `config.py` handles file I/O for presets but knows nothing about the API or CLI.
+The boundary is clean: `cli.py` wires commands together, `api.py` owns HTTP calls,
+`config.py` handles timer presets, and `reporting.py` owns report-specific parsing and
+config I/O.
 
 ## Development
 
@@ -96,9 +103,10 @@ Features worth considering:
 - `tgl ls` to list recent entries
 - Shell completions for preset names
 - Duration display in `start` output (elapsed since start)
+- Plain-text local analysis workflows built on `tgl report total`
 
 Features intentionally out of scope:
 
-- Reporting and analytics
+- Rich dashboards or spreadsheet-specific UI
 - Project/workspace/client management
 - Offline mode or local caching

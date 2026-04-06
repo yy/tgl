@@ -37,6 +37,8 @@ tgl summary                       # today's time by project
 tgl summary week                  # this week so far
 tgl summary last-week             # previous Mon-Sun
 tgl summary month                 # this month so far
+tgl report total                  # last week's filtered total (Sun-Sat)
+tgl report batch weekly_sheet     # named multi-line report from reports.toml
 ```
 
 ### Presets
@@ -72,6 +74,32 @@ tgl start "review" -t bug -t urgent         # add tags
 tgl start -P admin "emails"                 # use a preset
 tgl start                                   # interactive mode
 tgl --apitoken TOKEN start "one-off"        # override token
+```
+
+### Reporting
+
+`tgl summary` remains the project-by-project overview. Use `tgl report` for
+filter-oriented totals and batch reports built on the Toggl Reports API:
+
+```
+tgl report total --range 2026-03-01:2026-03-07 --client 123456
+tgl report total this-week --tag 789012
+tgl report batch weekly_sheet --copy
+tgl report import --name weekly_sheet /path/to/entries.json
+```
+
+Report sets live in `~/.config/tgl/reports.toml`:
+
+```toml
+[report_sets.weekly_sheet]
+
+[[report_sets.weekly_sheet.entries]]
+label = "Client Work"
+clients = [123456, 234567]
+
+[[report_sets.weekly_sheet.entries]]
+label = "Internal"
+tags = [789012]
 ```
 
 ## Development

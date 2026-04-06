@@ -1,5 +1,7 @@
 """Toggl API wrapper for timer operations."""
 
+import codecs
+import datetime
 import os
 from base64 import b64encode
 
@@ -15,6 +17,7 @@ class TogglAPI:
         else:
             self.api_token = api_token
         self.api_url = "https://api.track.toggl.com/api/v9"
+        self.report_url = "https://api.track.toggl.com/reports/api/v3"
         auth_string = f"{self.api_token}:api_token"
         auth_value = "Basic " + b64encode(auth_string.encode("ascii")).decode("ascii")
         self.headers = {
@@ -107,8 +110,6 @@ class TogglAPI:
 
     def time_entries_between(self, start_date, end_date):
         """Get time entries between two dates (inclusive, local time). Dates are date objects."""
-        import datetime
-
         local_tz = datetime.datetime.now(datetime.timezone.utc).astimezone().tzinfo
         start = datetime.datetime.combine(
             start_date, datetime.time.min, tzinfo=local_tz
@@ -135,8 +136,6 @@ class TogglAPI:
         self, description, workspace_id, project_id=None, tags=None, start_time=None
     ):
         """Start a new time entry. start_time is an optional datetime (UTC)."""
-        import datetime
-
         if start_time is None:
             start_time = datetime.datetime.now(datetime.timezone.utc)
 
@@ -165,3 +164,37 @@ class TogglAPI:
         wid = entry["workspace_id"]
         eid = entry["id"]
         return self.patch(f"/workspaces/{wid}/time_entries/{eid}/stop")
+
+    def summary_report_csv(
+        self, workspace_id, start_date, end_date, client_ids=None, tag_ids=None
+    ):
+        """Fetch summary CSV from the Toggl Reports API."""
+        url = f"{self.report_url}/workspace/{workspace_id}/summary/time_entries.csv"
+        body = {
+            "start_date": start_date.isoformat(),
+            "end_date": end_date.isoformat(),
+        }
+        if client_ids:
+            body["client_ids"] = list(client_ids)
+        if tag_ids:
+            body["tag_ids"] = list(tag_ids)
+
+        response = requests.post(url, headers=self.headers, json=body)
+        response.raise_for_status()
+        return self._decode_bom_text(response.content)
+
+    @staticmethod
+    def _decode_bom_text(raw_data):
+        """Decode CSV text that may start with a BOM."""
+        for bom, encoding in (
+            (codecs.BOM_UTF8, "utf-8"),
+            (codecs.BOM_UTF16_LE, "utf-16le"),
+            (codecs.BOM_UTF16_BE, "utf-16be"),
+            (codecs.BOM_UTF32_LE, "utf-32le"),
+            (codecs.BOM_UTF32_BE, "utf-32be"),
+        ):
+            if raw_data.startswith(bom):
+                raw_data = raw_data[len(bom) :]
+                return raw_data.decode(encoding)
+
+        return raw_data.decode("utf-8")

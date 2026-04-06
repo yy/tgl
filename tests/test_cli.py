@@ -20,7 +20,7 @@ def test_start(mock_api_cls):
     assert result.exit_code == 0
     assert "Started: test task" in result.output
     api.start_timer.assert_called_once_with(
-        "test task", 123, project_id=None, tags=None
+        "test task", 123, project_id=None, tags=None, start_time=None
     )
 
 
@@ -104,7 +104,11 @@ def test_start_with_preset(mock_api_cls, mock_presets):
     assert "Started: writing paper" in result.output
     assert "Research-related" in result.output
     api.start_timer.assert_called_once_with(
-        "writing paper", 123, project_id=100, tags=["Core activities"]
+        "writing paper",
+        123,
+        project_id=100,
+        tags=["Core activities"],
+        start_time=None,
     )
 
 
