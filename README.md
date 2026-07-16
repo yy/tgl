@@ -1,5 +1,8 @@
 # tgl
 
+> [!IMPORTANT]
+> This project is archived and no longer maintained. Existing releases remain available for reproducibility.
+
 A command-line interface for [Toggl Track](https://toggl.com/track/) timers. Start, stop, and check timers without leaving the terminal.
 
 ## Install
